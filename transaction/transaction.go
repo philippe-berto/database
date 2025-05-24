@@ -12,7 +12,7 @@ import (
 	otelTracer "go.opentelemetry.io/otel/trace"
 )
 
-const tracerName = "github.com/philippe-berto/database"
+const tracerName = "database-transaction"
 
 type (
 	TX struct {

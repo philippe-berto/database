@@ -12,8 +12,6 @@ import (
 	"github.com/caarlos0/env/v10"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/philippe-berto/logger"
 )
 
 var cfg Config
@@ -34,9 +32,8 @@ func TestConnection(t *testing.T) {
 
 	t.Run("should be successfully connect to DB", func(t *testing.T) {
 		ctx := context.Background()
-		log, _ := logger.NewTestLogger()
 
-		client, err := New(ctx, cfg, false, "", log)
+		client, err := New(ctx, cfg, false, "")
 		require.NoError(t, err)
 
 		pingErr := client.Ping(ctx)
@@ -45,12 +42,11 @@ func TestConnection(t *testing.T) {
 
 	t.Run("should failed, when no database found", func(t *testing.T) {
 		ctx := context.Background()
-		log, _ := logger.NewTestLogger()
 
 		cfgcopy := cfg
 		cfgcopy.Host = "127.0.0.2"
 
-		_, err := New(ctx, cfgcopy, false, "", log)
+		_, err := New(ctx, cfgcopy, false, "")
 		require.Error(t, err)
 		require.ErrorContains(t, err, "dial error")
 	})

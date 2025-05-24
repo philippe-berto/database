@@ -3,6 +3,7 @@ package postgresdb
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -12,7 +13,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
-	l "github.com/philippe-berto/logger"
 	"go.nhat.io/otelsql"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 )
@@ -34,11 +34,10 @@ type (
 
 	Client struct {
 		client *sqlx.DB
-		log    *l.Logger
 	}
 )
 
-func New(ctx context.Context, cfg Config, tracerEnable bool, migrationLocation string, log *l.Logger) (*Client, error) {
+func New(ctx context.Context, cfg Config, tracerEnable bool, migrationLocation string) (*Client, error) {
 	databaseURL := cfg.GetDataBaseURL()
 
 	driverName := "pgx"
@@ -50,19 +49,15 @@ func New(ctx context.Context, cfg Config, tracerEnable bool, migrationLocation s
 			otelsql.WithSystem(semconv.DBSystemPostgreSQL),
 		)
 		if err != nil {
-			log.WithFields(l.Fields{"error": err.Error()}).
-				Error("Database: otelsql driver")
 
-			return nil, err
+			return nil, fmt.Errorf("database: failed to register otelsql driver: %v", err)
 		}
 	}
 
 	db, err := sqlx.Open(driverName, databaseURL)
 	if err != nil {
-		log.WithFields(l.Fields{"error": err.Error()}).
-			Error("Database: fail to open connection")
 
-		return nil, err
+		return nil, fmt.Errorf("database: failed to open connection: %v", err)
 	}
 
 	if cfg.OpenConnection != 0 {
@@ -78,24 +73,21 @@ func New(ctx context.Context, cfg Config, tracerEnable bool, migrationLocation s
 	}
 
 	if err = db.PingContext(ctx); err != nil {
-		log.WithFields(l.Fields{"error": err.Error()}).
-			Error("Database: Could not ping the database")
 
-		return nil, err
+		return nil, fmt.Errorf("database: failed to ping database: %v", err)
 	}
 
-	migrations, err := runMigration(cfg, migrationLocation, log)
+	migrations, err := runMigration(cfg, migrationLocation)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = closeMigration(migrations, log); err != nil {
+	if err = closeMigration(migrations); err != nil {
 		return nil, err
 	}
 
 	s := &Client{
 		client: db,
-		log:    log,
 	}
 
 	return s, nil
@@ -132,49 +124,38 @@ func (cfg Config) GetDataBaseURL() string {
 	return baseURL
 }
 
-func runMigration(cfg Config, migrationLocation string, log *l.Logger) (*migrate.Migrate, error) {
+func runMigration(cfg Config, migrationLocation string) (*migrate.Migrate, error) {
 	if !cfg.RunMigration || migrationLocation == "" {
 		return nil, nil
 	}
 
-	log.Info("Running migration")
+	log.Println("Running migration")
 	m, err := migrate.New(migrationLocation, cfg.GetDataBaseURL())
 	if err != nil {
-		log.WithFields(l.Fields{"error": err.Error()}).
-			Error("Database: Error setting up migration connection")
 
-		return nil, err
+		return nil, fmt.Errorf("database: failed to create migration instance: %v", err)
 	}
 
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange && err != migrate.ErrNilVersion {
-		log.WithFields(l.Fields{"error": err.Error()}).
-			Error("Database: Error running migration")
 
-		return nil, err
+		return nil, fmt.Errorf("database: failed to run migration: %v", err)
 	}
 
 	return m, nil
 }
 
-func closeMigration(migrations *migrate.Migrate, log *l.Logger) error {
+func closeMigration(migrations *migrate.Migrate) error {
 	if migrations == nil {
 		return nil
 	}
 
 	sourceErr, dbErr := migrations.Close()
 	if sourceErr != nil {
-		log.WithFields(l.Fields{"error": sourceErr.Error()}).
-			Error("Database: Error close migration source")
-
-		return fmt.Errorf("database: failed to close migration source")
+		return fmt.Errorf("database: failed to close migration source: %v", sourceErr)
 	}
-
 	if dbErr != nil {
-		log.WithFields(l.Fields{"error": dbErr.Error()}).
-			Error("Database: Error close migration database")
-
-		return fmt.Errorf("database: failed to close migration db")
+		return fmt.Errorf("database: failed to close migration db: %v", dbErr)
 	}
 
 	return nil
