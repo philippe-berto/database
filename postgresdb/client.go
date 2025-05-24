@@ -19,12 +19,12 @@ import (
 
 type (
 	Config struct {
-		Host           string `env:"POSTGRES_HOST,required"`
-		Name           string `env:"POSTGRES_DB"        envDefault:"test"`
-		Password       string `env:"POSTGRES_PASSWORD"  envDefault:"postgres"`
-		User           string `env:"POSTGRES_USER"      envDefault:"postgres"`
-		Port           int    `env:"POSTGRES_PORT"      envDefault:"5432"`
-		Driver         string `env:"POSTGRES_DRIVER"    envDefault:"postgres"`
+		Host           string `env:"POSTGRES_HOST"            envDefault:"localhost"`
+		Name           string `env:"POSTGRES_DB"              envDefault:"test"`
+		Password       string `env:"POSTGRES_PASSWORD"        envDefault:"postgres"`
+		User           string `env:"POSTGRES_USER"            envDefault:"postgres"`
+		Port           int    `env:"POSTGRES_PORT"            envDefault:"5432"`
+		Driver         string `env:"POSTGRES_DRIVER"          envDefault:"postgres"`
 		Timeout        int    `env:"POSTGRES_TIMEOUT"         envDefault:"5"`
 		IdleConnection int    `env:"POSTGRES_IDLE_CONNECTION" envDefault:"0"`
 		LifeTime       int    `env:"POSTGRES_LIFE_TIME"       envDefault:"0"`
