@@ -2,8 +2,6 @@ module github.com/philippe-berto/database
 
 go 1.23.0
 
-toolchain go1.23.9
-
 require (
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/golang-migrate/migrate/v4 v4.18.3
