@@ -18,6 +18,22 @@ This file implements a PostgreSQL client with connection management, configurati
 - **Migration support:** Integrates with `golang-migrate` to run database migrations automatically on startup.
 - **Utility methods:** Includes helpers for preparing SQL statements and extracting constraint identifiers from errors.
 
+**Connection string and TLS:**
+
+`GetDataBaseURL` builds the URL with `net/url`, so a user or password holding `@`, `/`, `:`, `?`, `#` or `%` is escaped instead of breaking the URL, and an IPv6 host is bracketed. The same URL feeds both the pgx pool and `golang-migrate`, so TLS applies to migrations too.
+
+| Variable               | Default   | Meaning                                                                                                               |
+| ---------------------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_SSLMODE`     | `disable` | `disable`, `require`, `verify-ca` or `verify-full`. Anything else makes `New` fail before connecting.                 |
+| `POSTGRES_SSLROOTCERT` | empty     | Path to the CA certificate the server's certificate must chain to. Refused with `disable`, since it would be ignored. |
+
+- `disable` keeps the behaviour of v0.1.x and is right only on a trusted network: local Docker, or a private network that is already encrypted.
+- `require` encrypts but accepts any certificate, so it does not stop an attacker who can intercept the connection from impersonating the server.
+- `verify-full` encrypts, checks the certificate against `POSTGRES_SSLROOTCERT` and checks that it names `POSTGRES_HOST`. Use it for any database reached over the internet.
+- `allow` and `prefer` are not accepted: `golang-migrate` connects with `lib/pq`, which does not support them, and both silently fall back to plaintext.
+
+For a hosted database such as Supabase, download the provider's CA certificate, ship it with the application, and set `POSTGRES_SSLMODE=verify-full` with `POSTGRES_SSLROOTCERT` pointing at it.
+
 ### `transaction/transaction.go`
 
 This file implements a transaction management package for PostgreSQL using the `postgresdb.Client` as the underlying database client. It provides a structured way to execute operations within a database transaction, with optional OpenTelemetry tracing support.

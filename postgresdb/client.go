@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -30,6 +34,8 @@ type (
 		LifeTime       int    `env:"POSTGRES_LIFE_TIME"       envDefault:"0"`
 		OpenConnection int    `env:"POSTGRES_OPEN_CONNECTION" envDefault:"0"`
 		RunMigration   bool   `env:"POSTGRES_MIGRATION"       envDefault:"1"`
+		SSLMode        string `env:"POSTGRES_SSLMODE"         envDefault:"disable"`
+		SSLRootCert    string `env:"POSTGRES_SSLROOTCERT"`
 	}
 
 	Client struct {
@@ -37,7 +43,13 @@ type (
 	}
 )
 
+var SupportedSSLModes = []string{"disable", "require", "verify-ca", "verify-full"}
+
 func New(ctx context.Context, cfg Config, tracerEnable bool, migrationLocation string) (*Client, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	databaseURL := cfg.GetDataBaseURL()
 
 	driverName := "pgx"
@@ -113,15 +125,39 @@ func (c *Client) PrepareStatement(query string) (*sqlx.Stmt, error) {
 	return c.client.Preparex(query)
 }
 
-func (cfg Config) GetDataBaseURL() string {
-	baseURL := fmt.Sprintf("%s://%s:%s@%s:%d/%s?sslmode=disable",
-		cfg.Driver, cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name)
-
-	if cfg.Timeout != 0 {
-		baseURL += fmt.Sprintf("&connect_timeout=%d", cfg.Timeout)
+func (cfg Config) Validate() error {
+	if !slices.Contains(SupportedSSLModes, cfg.SSLMode) {
+		return fmt.Errorf("database: unsupported POSTGRES_SSLMODE %q, expected one of %v", cfg.SSLMode, SupportedSSLModes)
 	}
 
-	return baseURL
+	if cfg.SSLRootCert != "" && cfg.SSLMode == "disable" {
+		return fmt.Errorf("database: POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE is disable")
+	}
+
+	return nil
+}
+
+func (cfg Config) GetDataBaseURL() string {
+	query := url.Values{}
+	query.Set("sslmode", cfg.SSLMode)
+
+	if cfg.SSLRootCert != "" {
+		query.Set("sslrootcert", cfg.SSLRootCert)
+	}
+
+	if cfg.Timeout != 0 {
+		query.Set("connect_timeout", strconv.Itoa(cfg.Timeout))
+	}
+
+	databaseURL := url.URL{
+		Scheme:   cfg.Driver,
+		User:     url.UserPassword(cfg.User, cfg.Password),
+		Host:     net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
+		Path:     "/" + cfg.Name,
+		RawQuery: query.Encode(),
+	}
+
+	return databaseURL.String()
 }
 
 func runMigration(cfg Config, migrationLocation string) (*migrate.Migrate, error) {
